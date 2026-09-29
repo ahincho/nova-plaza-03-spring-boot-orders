@@ -33,8 +33,7 @@ public class OrderItem {
     private BigDecimal unitPrice;
 
     /** Para JPA. */
-    protected OrderItem() {
-    }
+    protected OrderItem() {}
 
     OrderItem(Order order, String sku, int quantity, BigDecimal unitPrice) {
         this.order = order;

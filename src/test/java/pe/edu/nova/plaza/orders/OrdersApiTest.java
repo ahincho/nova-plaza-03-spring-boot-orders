@@ -58,8 +58,11 @@ class OrdersApiTest {
     void repeatingAPurchaseReturnsTheSameOrder() throws Exception {
         String key = UUID.randomUUID().toString();
 
-        MvcResult first = mvc.perform(place("customer-2", key)).andExpect(status().isCreated()).andReturn();
-        MvcResult second = mvc.perform(place("customer-2", key)).andExpect(status().isOk()).andReturn();
+        MvcResult first = mvc.perform(place("customer-2", key))
+                .andExpect(status().isCreated())
+                .andReturn();
+        MvcResult second =
+                mvc.perform(place("customer-2", key)).andExpect(status().isOk()).andReturn();
 
         String id = idOf(first);
         assertThat(idOf(second)).isEqualTo(id);
@@ -68,7 +71,8 @@ class OrdersApiTest {
 
     @Test
     void anOrderIsOnlyVisibleToItsCustomer() throws Exception {
-        String id = idOf(mvc.perform(place("customer-3", UUID.randomUUID().toString())).andReturn());
+        String id = idOf(
+                mvc.perform(place("customer-3", UUID.randomUUID().toString())).andReturn());
 
         mvc.perform(get("/v1/orders/{id}", id).header("X-Customer-Id", "customer-3"))
                 .andExpect(status().isOk())
@@ -79,8 +83,10 @@ class OrdersApiTest {
 
     @Test
     void aCustomerListsTheirOrdersNewestFirst() throws Exception {
-        String older = idOf(mvc.perform(place("customer-4", UUID.randomUUID().toString())).andReturn());
-        String newer = idOf(mvc.perform(place("customer-4", UUID.randomUUID().toString())).andReturn());
+        String older = idOf(
+                mvc.perform(place("customer-4", UUID.randomUUID().toString())).andReturn());
+        String newer = idOf(
+                mvc.perform(place("customer-4", UUID.randomUUID().toString())).andReturn());
 
         mvc.perform(get("/v1/orders").header("X-Customer-Id", "customer-4"))
                 .andExpect(status().isOk())

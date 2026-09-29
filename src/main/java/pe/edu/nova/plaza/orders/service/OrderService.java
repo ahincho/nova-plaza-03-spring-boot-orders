@@ -52,7 +52,8 @@ public class OrderService {
      */
     @Transactional(readOnly = true)
     public Optional<Order> find(String customerId, UUID id) {
-        return orders.findWithItemsById(id).filter(order -> order.getCustomerId().equals(customerId));
+        return orders.findWithItemsById(id)
+                .filter(order -> order.getCustomerId().equals(customerId));
     }
 
     /**
@@ -70,8 +71,8 @@ public class OrderService {
         List<Order.Line> lines = request.items().stream()
                 .map(item -> new Order.Line(item.sku(), item.quantity(), item.unitPrice()))
                 .toList();
-        return Order.place(customerId, idempotencyKey, request.reservationId(), request.currency(), lines,
-                clock.instant());
+        return Order.place(
+                customerId, idempotencyKey, request.reservationId(), request.currency(), lines, clock.instant());
     }
 
     /**
@@ -80,6 +81,5 @@ public class OrderService {
      * @param order el pedido
      * @param created si se creó ahora o ya existía por la misma compra
      */
-    public record Placement(Order order, boolean created) {
-    }
+    public record Placement(Order order, boolean created) {}
 }

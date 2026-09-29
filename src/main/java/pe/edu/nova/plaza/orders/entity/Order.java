@@ -60,8 +60,7 @@ public class Order {
     private List<OrderItem> items = new ArrayList<>();
 
     /** Para JPA. */
-    protected Order() {
-    }
+    protected Order() {}
 
     /**
      * Crea un pedido pendiente.
@@ -74,8 +73,13 @@ public class Order {
      * @param now el momento de la compra
      * @return el pedido, todavía sin guardar
      */
-    public static Order place(String customerId, String idempotencyKey, UUID reservationId, String currency,
-            List<Line> lines, Instant now) {
+    public static Order place(
+            String customerId,
+            String idempotencyKey,
+            UUID reservationId,
+            String currency,
+            List<Line> lines,
+            Instant now) {
         Order order = new Order();
         order.id = UUID.randomUUID();
         order.customerId = customerId;
@@ -168,6 +172,5 @@ public class Order {
      * @param quantity las unidades
      * @param unitPrice el precio de una unidad
      */
-    public record Line(String sku, int quantity, BigDecimal unitPrice) {
-    }
+    public record Line(String sku, int quantity, BigDecimal unitPrice) {}
 }

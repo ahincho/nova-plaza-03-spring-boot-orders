@@ -34,6 +34,5 @@ public record OrderResponse(
      * @param quantity las unidades
      * @param unitPrice el precio de una unidad al momento de la compra
      */
-    public record Item(String sku, int quantity, BigDecimal unitPrice) {
-    }
+    public record Item(String sku, int quantity, BigDecimal unitPrice) {}
 }
