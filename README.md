@@ -22,7 +22,7 @@ que responder 409.
 
 | Pieza | Para qué |
 |---|---|
-| `pe.edu.nova.java.spring-boot` | el plugin de Gradle: Java 25, Spring Boot 4.0.8 y el estándar de API |
+| `pe.edu.nova.java.spring-boot-service` | el toolchain de Java: Spring Boot con el estándar de API, formato, Checkstyle, cobertura, validación de commits, OWASP y la imagen |
 | `nova-secrets-spring-boot-starter` y `nova-secrets-vault` | las credenciales de la base salen de Vault, del secreto `plaza/orders/db` |
 | `nova-observability-spring-boot-starter` | trazas, logs y métricas por OTLP |
 | `nova-architecture-rules` | las reglas de capas, como una prueba más |
@@ -41,11 +41,17 @@ export VAULT_ADDR=http://localhost:8200 VAULT_TOKEN=plaza-local-root
 Escucha en el puerto 8081. Las dependencias de Nova están en GitHub Packages, así que Gradle necesita
 `GITHUB_ACTOR` y un `GITHUB_TOKEN` con `read:packages`.
 
-## Pruebas
+## Pruebas y calidad
 
 ```bash
 ./gradlew build
+./gradlew novaFormat
+./gradlew novaDocker
 ```
+
+`build` corre lo mismo que el CI: el formato, Checkstyle, las pruebas y una cobertura mínima del 80 %
+de líneas. `novaFormat` corrige el formato. El primer build instala un hook que valida cada mensaje de
+commit con Conventional Commits, y el CI valida los commits de cada PR.
 
 Las pruebas levantan un Postgres y un Vault reales con Testcontainers, así que piden Docker. El
 servicio lee sus credenciales de Vault igual que en producción.
