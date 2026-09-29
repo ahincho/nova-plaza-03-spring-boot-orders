@@ -1,0 +1,6 @@
+# Commits que solo cambian el formato. git blame los salta con:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub los salta solo.
+
+# style: apply the Nova formatter
+fc6258d6401da7582ee35def70bd0f9cf997f0e5
