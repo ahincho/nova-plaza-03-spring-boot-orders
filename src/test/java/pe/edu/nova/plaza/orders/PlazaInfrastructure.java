@@ -20,13 +20,12 @@ final class PlazaInfrastructure {
             .withUsername("orders")
             .withPassword("orders-test");
 
-    private static final VaultContainer<?> VAULT = new VaultContainer<>("hashicorp/vault:2.1.1")
-            .withVaultToken(VAULT_TOKEN);
+    private static final VaultContainer<?> VAULT =
+            new VaultContainer<>("hashicorp/vault:2.1.1").withVaultToken(VAULT_TOKEN);
 
     private static boolean started;
 
-    private PlazaInfrastructure() {
-    }
+    private PlazaInfrastructure() {}
 
     /** Levanta los contenedores, carga el secreto y apunta el servicio a Vault. */
     static synchronized void start() {
@@ -36,7 +35,11 @@ final class PlazaInfrastructure {
         POSTGRES.start();
         VAULT.start();
         try {
-            VAULT.execInContainer("vault", "kv", "put", "secret/plaza/orders/db",
+            VAULT.execInContainer(
+                    "vault",
+                    "kv",
+                    "put",
+                    "secret/plaza/orders/db",
                     "DB_URL=" + POSTGRES.getJdbcUrl(),
                     "DB_USERNAME=" + POSTGRES.getUsername(),
                     "DB_PASSWORD=" + POSTGRES.getPassword());

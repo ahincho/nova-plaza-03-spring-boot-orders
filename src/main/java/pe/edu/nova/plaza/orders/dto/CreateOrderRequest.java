@@ -34,6 +34,5 @@ public record CreateOrderRequest(
     public record Item(
             @NotBlank String sku,
             @Positive int quantity,
-            @NotNull @Positive BigDecimal unitPrice) {
-    }
+            @NotNull @Positive BigDecimal unitPrice) {}
 }

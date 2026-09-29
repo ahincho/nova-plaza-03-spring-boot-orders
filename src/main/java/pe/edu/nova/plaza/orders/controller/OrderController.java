@@ -69,8 +69,8 @@ public class OrderController {
      * @return el pedido, o 404 si no existe o es de otro cliente
      */
     @GetMapping("/{id}")
-    public ResponseEntity<OrderResponse> find(@RequestHeader(CUSTOMER_HEADER) String customerId,
-            @PathVariable UUID id) {
+    public ResponseEntity<OrderResponse> find(
+            @RequestHeader(CUSTOMER_HEADER) String customerId, @PathVariable UUID id) {
         return ResponseEntity.of(service.find(customerId, id).map(OrderController::toResponse));
     }
 
@@ -82,14 +82,23 @@ public class OrderController {
      */
     @GetMapping
     public List<OrderResponse> list(@RequestHeader(CUSTOMER_HEADER) String customerId) {
-        return service.list(customerId).stream().map(OrderController::toResponse).toList();
+        return service.list(customerId).stream()
+                .map(OrderController::toResponse)
+                .toList();
     }
 
     private static OrderResponse toResponse(Order order) {
         List<OrderResponse.Item> items = order.getItems().stream()
                 .map(item -> new OrderResponse.Item(item.getSku(), item.getQuantity(), item.getUnitPrice()))
                 .toList();
-        return new OrderResponse(order.getId(), order.getCustomerId(), order.getStatus().name(),
-                order.getCurrency(), order.getTotal(), order.getReservationId(), order.getCreatedAt(), items);
+        return new OrderResponse(
+                order.getId(),
+                order.getCustomerId(),
+                order.getStatus().name(),
+                order.getCurrency(),
+                order.getTotal(),
+                order.getReservationId(),
+                order.getCreatedAt(),
+                items);
     }
 }
