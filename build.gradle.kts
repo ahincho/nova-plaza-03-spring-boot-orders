@@ -7,10 +7,10 @@ plugins {
 group = "pe.edu.nova.plaza"
 version = findProperty("version") as String
 
-val novaSecrets = "1.0.0"
+val novaSecrets = "1.0.1"
 
 dependencies {
-    implementation("pe.edu.nova.java.starters:nova-observability-spring-boot-starter:2.0.1")
+    implementation("pe.edu.nova.java.starters:nova-observability-spring-boot-starter:2.0.2")
     implementation("pe.edu.nova.java.starters:nova-secrets-spring-boot-starter:$novaSecrets")
     runtimeOnly("pe.edu.nova.java.libs:nova-secrets-vault:$novaSecrets")
 
