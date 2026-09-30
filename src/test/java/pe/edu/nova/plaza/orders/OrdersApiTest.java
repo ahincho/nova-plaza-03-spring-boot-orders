@@ -3,6 +3,7 @@ package pe.edu.nova.plaza.orders;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -55,18 +56,59 @@ class OrdersApiTest {
     }
 
     @Test
-    void repeatingAPurchaseReturnsTheSameOrder() throws Exception {
+    void repeatingAPurchaseReplaysTheSameResponseWithoutASecondOrder() throws Exception {
         String key = UUID.randomUUID().toString();
+        String order = newOrder();
 
-        MvcResult first = mvc.perform(place("customer-2", key))
+        MvcResult first = mvc.perform(place("customer-2", key, order))
                 .andExpect(status().isCreated())
+                .andExpect(header().doesNotExist("Idempotent-Replayed"))
                 .andReturn();
-        MvcResult second =
-                mvc.perform(place("customer-2", key)).andExpect(status().isOk()).andReturn();
+        MvcResult second = mvc.perform(place("customer-2", key, order))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Idempotent-Replayed", "true"))
+                .andReturn();
 
-        String id = idOf(first);
-        assertThat(idOf(second)).isEqualTo(id);
+        assertThat(second.getResponse().getContentAsString())
+                .isEqualTo(first.getResponse().getContentAsString());
         assertThat(orders.findByCustomerIdOrderByCreatedAtDesc("customer-2")).hasSize(1);
+    }
+
+    @Test
+    void theKeyOfAnotherCustomerIsAnotherPurchaseAndNeverTheirOrder() throws Exception {
+        String key = UUID.randomUUID().toString();
+        String order = newOrder();
+
+        String mine = idOf(mvc.perform(place("customer-5", key, order)).andReturn());
+        MvcResult theirs = mvc.perform(place("customer-6", key, order))
+                .andExpect(status().isCreated())
+                .andExpect(header().doesNotExist("Idempotent-Replayed"))
+                .andExpect(jsonPath("$.data.customerId").value("customer-6"))
+                .andReturn();
+
+        assertThat(idOf(theirs)).isNotEqualTo(mine);
+    }
+
+    @Test
+    void theSameKeyWithAnotherOrderIs422() throws Exception {
+        String key = UUID.randomUUID().toString();
+        mvc.perform(place("customer-7", key, newOrder())).andExpect(status().isCreated());
+
+        mvc.perform(place("customer-7", key, newOrder()))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.errors[0].code").value("IDEMPOTENCY_KEY_REUSED"));
+        assertThat(orders.findByCustomerIdOrderByCreatedAtDesc("customer-7")).hasSize(1);
+    }
+
+    @Test
+    void aPurchaseWithoutKeyIs400() throws Exception {
+        mvc.perform(post("/v1/orders")
+                        .header("X-Customer-Id", "customer-8")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(newOrder()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].code").value("IDEMPOTENCY_KEY_REQUIRED"));
+        assertThat(orders.findByCustomerIdOrderByCreatedAtDesc("customer-8")).isEmpty();
     }
 
     @Test
@@ -96,11 +138,21 @@ class OrdersApiTest {
     }
 
     private static org.springframework.test.web.servlet.RequestBuilder place(String customerId, String key) {
+        return place(customerId, key, newOrder());
+    }
+
+    private static org.springframework.test.web.servlet.RequestBuilder place(
+            String customerId, String key, String order) {
         return post("/v1/orders")
                 .header("X-Customer-Id", customerId)
                 .header("Idempotency-Key", key)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(ORDER.formatted(UUID.randomUUID()));
+                .content(order);
+    }
+
+    /** Un pedido con su propia reserva: dos llamadas dan dos pedidos distintos. */
+    private static String newOrder() {
+        return ORDER.formatted(UUID.randomUUID());
     }
 
     private static String idOf(MvcResult result) throws Exception {

@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import pe.edu.nova.java.starters.idempotency.Idempotent;
 import pe.edu.nova.plaza.orders.dto.CreateOrderRequest;
 import pe.edu.nova.plaza.orders.dto.OrderResponse;
 import pe.edu.nova.plaza.orders.entity.Order;
@@ -43,22 +44,23 @@ public class OrderController {
     }
 
     /**
-     * Crea un pedido pendiente. Si la compra se repite con la misma clave, devuelve el mismo pedido
-     * con 200 en lugar de 201.
+     * Crea un pedido pendiente. La compra es idempotente (ADR-047): si se repite con la misma clave, el
+     * cliente recibe la misma respuesta, con {@code Idempotent-Replayed: true}, y no se crea otro pedido. La
+     * misma clave de otro cliente es otra compra, y con otro contenido es un 422.
      *
      * @param customerId el cliente
      * @param idempotencyKey la clave de la compra
      * @param request el pedido
-     * @return el pedido
+     * @return el pedido, con 201
      */
+    @Idempotent
     @PostMapping
     public ResponseEntity<OrderResponse> place(
             @RequestHeader(CUSTOMER_HEADER) String customerId,
             @RequestHeader(IDEMPOTENCY_HEADER) String idempotencyKey,
             @Valid @RequestBody CreateOrderRequest request) {
-        OrderService.Placement placement = service.place(customerId, idempotencyKey, request);
-        return ResponseEntity.status(placement.created() ? HttpStatus.CREATED : HttpStatus.OK)
-                .body(toResponse(placement.order()));
+        Order order = service.place(customerId, idempotencyKey, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(order));
     }
 
     /**

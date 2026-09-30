@@ -11,9 +11,24 @@ precio de cada línea es el que devolvió la reserva del catálogo, nunca el del
 
 | Método | Ruta | Qué hace |
 |---|---|---|
-| `POST` | `/v1/orders` | crea un pedido pendiente; lleva `Idempotency-Key`, y repetir la clave devuelve el mismo pedido con 200 |
+| `POST` | `/v1/orders` | crea un pedido pendiente; lleva `Idempotency-Key`, y repetir la compra devuelve la misma respuesta |
 | `GET` | `/v1/orders/{id}` | devuelve un pedido del cliente; el de otro cliente es un 404 |
 | `GET` | `/v1/orders` | lista los pedidos del cliente, del más nuevo al más viejo |
+
+La compra es idempotente con la capacidad de Nova
+([ADR-047](https://github.com/ahincho/nova-shared-01-docs/blob/main/adrs/shared/ADR-047-idempotencia-detras-de-un-contrato.md)).
+La clave vale por cliente, el que llega en `X-Customer-Id`:
+
+| Situación | Respuesta |
+|---|---|
+| La compra se repite con la misma clave | la misma respuesta, con `Idempotent-Replayed: true`, sin crear otro pedido |
+| Otro cliente usa la misma clave | es otra compra |
+| La misma clave llega con otro pedido | 422, `IDEMPOTENCY_KEY_REUSED` |
+| La primera compra sigue en curso | 409, `IDEMPOTENCY_KEY_IN_USE`, con `Retry-After` |
+| Falta la clave | 400, `IDEMPOTENCY_KEY_REQUIRED` |
+
+El pedido y la respuesta guardada se confirman en el mismo commit, así que una caída entre los dos no
+crea un segundo pedido. Los registros viven en la tabla `idempotency_record`, que crea la migración `V2`.
 
 Confirmar y cancelar llegan con el módulo de errores de Nova, porque una transición inválida tiene
 que responder 409.
@@ -25,6 +40,7 @@ que responder 409.
 | `pe.edu.nova.java.spring-boot-service` | el toolchain de Java: Spring Boot con el estándar de API, formato, Checkstyle, cobertura, validación de commits, OWASP y la imagen |
 | `nova-secrets-spring-boot-starter` y `nova-secrets-vault` | las credenciales de la base salen de Vault, del secreto `plaza/orders/db` |
 | `nova-observability-spring-boot-starter` | trazas, logs y métricas por OTLP |
+| `nova-idempotency-spring-boot-starter` | la compra idempotente, con el almacén en la misma base de pedidos |
 | `nova-architecture-rules` | las reglas de capas, como una prueba más |
 
 ## Correrlo en local

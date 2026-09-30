@@ -12,6 +12,7 @@ val novaSecrets = "1.0.1"
 dependencies {
     implementation("pe.edu.nova.java.starters:nova-observability-spring-boot-starter:2.0.2")
     implementation("pe.edu.nova.java.starters:nova-secrets-spring-boot-starter:$novaSecrets")
+    implementation("pe.edu.nova.java.starters:nova-idempotency-spring-boot-starter:0.1.1")
     runtimeOnly("pe.edu.nova.java.libs:nova-secrets-vault:$novaSecrets")
 
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
