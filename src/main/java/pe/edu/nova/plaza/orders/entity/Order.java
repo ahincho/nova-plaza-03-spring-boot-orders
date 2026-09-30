@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -21,10 +22,16 @@ import java.util.UUID;
  * Un pedido de un cliente.
  *
  * <p>Se crea pendiente, con los precios que devolvió la reserva del catálogo, y guarda la clave de
- * idempotencia de la compra para que repetirla no cree un segundo pedido.
+ * idempotencia de la compra para saber de qué compra salió. La que evita un segundo pedido es la capacidad de
+ * idempotencia de Nova (ADR-047); la clave del pedido es única por cliente, como la de la capacidad.
  */
 @Entity
-@Table(name = "orders")
+@Table(
+        name = "orders",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "orders_customer_idempotency_key",
+                        columnNames = {"customer_id", "idempotency_key"}))
 public class Order {
 
     @Id
@@ -46,7 +53,7 @@ public class Order {
     @Column(name = "reservation_id", nullable = false)
     private UUID reservationId;
 
-    @Column(name = "idempotency_key", nullable = false, unique = true)
+    @Column(name = "idempotency_key", nullable = false)
     private String idempotencyKey;
 
     @Column(name = "created_at", nullable = false)

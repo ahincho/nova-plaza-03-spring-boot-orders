@@ -11,15 +11,6 @@ import pe.edu.nova.plaza.orders.entity.Order;
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     /**
-     * Busca el pedido de una compra.
-     *
-     * @param idempotencyKey la clave de la compra
-     * @return el pedido, si la compra ya se hizo
-     */
-    @EntityGraph(attributePaths = "items")
-    Optional<Order> findByIdempotencyKey(String idempotencyKey);
-
-    /**
      * Busca un pedido con sus líneas.
      *
      * @param id el identificador

@@ -29,18 +29,17 @@ public class OrderService {
     }
 
     /**
-     * Crea el pedido de una compra, o devuelve el que ya existe si la compra se repite.
+     * Crea el pedido de una compra. Una compra repetida no llega aquí: la responde la capacidad de idempotencia
+     * con la respuesta que guardó (ADR-047).
      *
      * @param customerId el cliente que compra
-     * @param idempotencyKey la clave de la compra
+     * @param idempotencyKey la clave de la compra, que el pedido guarda para saber de qué compra salió
      * @param request el pedido
-     * @return el pedido, y si se creó ahora
+     * @return el pedido guardado
      */
     @Transactional
-    public Placement place(String customerId, String idempotencyKey, CreateOrderRequest request) {
-        return orders.findByIdempotencyKey(idempotencyKey)
-                .map(existing -> new Placement(existing, false))
-                .orElseGet(() -> new Placement(orders.save(newOrder(customerId, idempotencyKey, request)), true));
+    public Order place(String customerId, String idempotencyKey, CreateOrderRequest request) {
+        return orders.save(newOrder(customerId, idempotencyKey, request));
     }
 
     /**
@@ -74,12 +73,4 @@ public class OrderService {
         return Order.place(
                 customerId, idempotencyKey, request.reservationId(), request.currency(), lines, clock.instant());
     }
-
-    /**
-     * El resultado de crear un pedido.
-     *
-     * @param order el pedido
-     * @param created si se creó ahora o ya existía por la misma compra
-     */
-    public record Placement(Order order, boolean created) {}
 }
