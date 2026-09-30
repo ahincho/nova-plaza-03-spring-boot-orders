@@ -42,3 +42,23 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: ./gradlew novaCommitLint --from="$BASE" --to="$HEAD"
+
+  # Las dependencias del servicio contra las CVE conocidas, con el mirror de NVD de
+  # nova-shared-02-pipelines; falla con un CVSS de 7 o más.
+  owasp:
+    if: github.event_name == 'pull_request'
+    uses: ahincho/nova-shared-02-pipelines/.github/workflows/reusable-owasp-check.yml@main
+    with:
+      build-tool: gradle
+    secrets: inherit
+
+  sbom:
+    if: github.event_name == 'pull_request'
+    # reusable-sbom.yml declara contents: write para adjuntar el SBOM a un release; sin este
+    # permiso el workflow entero no llega a arrancar.
+    permissions:
+      contents: write
+    uses: ahincho/nova-shared-02-pipelines/.github/workflows/reusable-sbom.yml@main
+    with:
+      build-tool: gradle
+    secrets: inherit
