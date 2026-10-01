@@ -12,7 +12,7 @@ precio de cada línea es el que devolvió la reserva del catálogo, nunca el del
 | Método | Ruta | Qué hace |
 |---|---|---|
 | `POST` | `/v1/orders` | crea un pedido pendiente; lleva `Idempotency-Key`, y repetir la compra devuelve la misma respuesta |
-| `GET` | `/v1/orders/{id}` | devuelve un pedido del cliente; el de otro cliente es un 404 |
+| `GET` | `/v1/orders/{id}` | devuelve un pedido del cliente; el de otro cliente es un 404, igual que uno que no existe |
 | `GET` | `/v1/orders` | lista los pedidos del cliente, del más nuevo al más viejo |
 
 La compra es idempotente con la capacidad de Nova
@@ -30,8 +30,18 @@ La clave vale por cliente, el que llega en `X-Customer-Id`:
 El pedido y la respuesta guardada se confirman en el mismo commit, así que una caída entre los dos no
 crea un segundo pedido. Los registros viven en la tabla `idempotency_record`, que crea la migración `V2`.
 
-Confirmar y cancelar llegan con el módulo de errores de Nova, porque una transición inválida tiene
-que responder 409.
+Los errores siguen el modelo por capas de Nova
+([ADR-031](https://github.com/ahincho/nova-shared-01-docs/blob/main/adrs/shared/ADR-031-modulo-de-errores-por-capas-con-trazabilidad.md)):
+el servicio lanza lo que salió mal y el starter de Nova lo responde con el sobre, `metadata.traceId` y
+una línea de log.
+
+| Situación | Respuesta |
+|---|---|
+| El pedido no existe o es de otro cliente | 404, `ORDER_NOT_FOUND` (un `DomainError`) |
+| El pedido no es válido | 400, `BAD_REQUEST`, con un error por cada campo |
+
+Confirmar y cancelar llegan después, y una transición inválida va a responder 409 con un
+`DomainError.conflict`.
 
 ## Lo que usa de Nova
 

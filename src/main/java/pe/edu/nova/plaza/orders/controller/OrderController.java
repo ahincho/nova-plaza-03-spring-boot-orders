@@ -68,12 +68,11 @@ public class OrderController {
      *
      * @param customerId el cliente
      * @param id el pedido
-     * @return el pedido, o 404 si no existe o es de otro cliente
+     * @return el pedido; si no existe o es de otro cliente, el error de dominio responde un 404
      */
     @GetMapping("/{id}")
-    public ResponseEntity<OrderResponse> find(
-            @RequestHeader(CUSTOMER_HEADER) String customerId, @PathVariable UUID id) {
-        return ResponseEntity.of(service.find(customerId, id).map(OrderController::toResponse));
+    public OrderResponse find(@RequestHeader(CUSTOMER_HEADER) String customerId, @PathVariable UUID id) {
+        return toResponse(service.find(customerId, id));
     }
 
     /**
