@@ -1,6 +1,9 @@
 package pe.edu.nova.plaza.orders;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -119,8 +122,27 @@ class OrdersApiTest {
         mvc.perform(get("/v1/orders/{id}", id).header("X-Customer-Id", "customer-3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(id));
+        // El pedido ajeno responde lo mismo que uno que no existe, con el error de dominio de ADR-031.
         mvc.perform(get("/v1/orders/{id}", id).header("X-Customer-Id", "someone-else"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.errors[0].code").value("ORDER_NOT_FOUND"))
+                .andExpect(jsonPath("$.errors[0].message").value("El pedido " + id + " no existe"))
+                .andExpect(jsonPath("$.metadata.traceId").isNotEmpty());
+    }
+
+    @Test
+    void anInvalidOrderIs400WithItsFields() throws Exception {
+        String invalid = """
+                {"reservationId": "%s", "currency": "soles", "items": []}
+                """.formatted(UUID.randomUUID());
+
+        mvc.perform(place("customer-9", UUID.randomUUID().toString(), invalid))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[*].code", everyItem(is("BAD_REQUEST"))))
+                .andExpect(jsonPath("$.errors[*].field", containsInAnyOrder("currency", "items")));
+        assertThat(orders.findByCustomerIdOrderByCreatedAtDesc("customer-9")).isEmpty();
     }
 
     @Test

@@ -1,7 +1,7 @@
 plugins {
     // El toolchain de Java de Nova (ADR-044): Java 25, Spring Boot con los starters de Nova, formato,
     // Checkstyle, cobertura, validación de commits, OWASP, el SBOM y la imagen.
-    id("pe.edu.nova.java.spring-boot-service") version "1.3.1"
+    id("pe.edu.nova.java.spring-boot-service") version "2.0.0"
 }
 
 group = "pe.edu.nova.plaza"

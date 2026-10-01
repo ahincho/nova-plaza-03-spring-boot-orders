@@ -2,10 +2,10 @@ package pe.edu.nova.plaza.orders.service;
 
 import java.time.Clock;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.nova.java.libs.api.standard.error.DomainError;
 import pe.edu.nova.plaza.orders.dto.CreateOrderRequest;
 import pe.edu.nova.plaza.orders.entity.Order;
 import pe.edu.nova.plaza.orders.repository.OrderRepository;
@@ -13,6 +13,9 @@ import pe.edu.nova.plaza.orders.repository.OrderRepository;
 /** Crea y consulta pedidos. */
 @Service
 public class OrderService {
+
+    /** El código del error de dominio de un pedido que no existe para el cliente. */
+    public static final String ORDER_NOT_FOUND = "ORDER_NOT_FOUND";
 
     private final OrderRepository orders;
     private final Clock clock;
@@ -43,16 +46,19 @@ public class OrderService {
     }
 
     /**
-     * Busca un pedido de un cliente. El pedido de otro cliente no existe para él.
+     * Busca un pedido de un cliente. El pedido de otro cliente no existe para él, así que responde lo mismo
+     * que uno que no existe: no se le confirma a nadie que un pedido ajeno existe.
      *
      * @param customerId el cliente que pregunta
      * @param id el pedido
-     * @return el pedido, si existe y es suyo
+     * @return el pedido
+     * @throws DomainError {@code ORDER_NOT_FOUND}, si no existe o es de otro cliente
      */
     @Transactional(readOnly = true)
-    public Optional<Order> find(String customerId, UUID id) {
+    public Order find(String customerId, UUID id) {
         return orders.findWithItemsById(id)
-                .filter(order -> order.getCustomerId().equals(customerId));
+                .filter(order -> order.getCustomerId().equals(customerId))
+                .orElseThrow(() -> DomainError.notFound(ORDER_NOT_FOUND, "El pedido " + id + " no existe"));
     }
 
     /**
