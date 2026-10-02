@@ -13,8 +13,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -24,6 +27,7 @@ import pe.edu.nova.plaza.orders.repository.OrderRepository;
 /** La API de pedidos, contra un Postgres y un Vault reales. */
 @SpringBootTest
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class OrdersApiTest {
 
     private static final String ORDER = """
@@ -143,6 +147,23 @@ class OrdersApiTest {
                 .andExpect(jsonPath("$.errors[*].code", everyItem(is("BAD_REQUEST"))))
                 .andExpect(jsonPath("$.errors[*].field", containsInAnyOrder("currency", "items")));
         assertThat(orders.findByCustomerIdOrderByCreatedAtDesc("customer-9")).isEmpty();
+    }
+
+    @Test
+    void eachCommandAndQueryIsAuditedWithTheCustomerAsItsActor(CapturedOutput output) throws Exception {
+        String id = idOf(
+                mvc.perform(place("customer-10", UUID.randomUUID().toString())).andReturn());
+        mvc.perform(get("/v1/orders/{id}", id).header("X-Customer-Id", "customer-10"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/v1/orders/{id}", id).header("X-Customer-Id", "customer-11"))
+                .andExpect(status().isNotFound());
+
+        // La auditoría de ADR-053: el tipo, el actor y el resultado, nunca el contenido del pedido
+        assertThat(output.getOut())
+                .contains("COMMAND PlaceOrder by customer-10: SUCCEEDED")
+                .contains("QUERY FindOrder by customer-10: SUCCEEDED")
+                .contains("QUERY FindOrder by customer-11: FAILED ORDER_NOT_FOUND")
+                .doesNotContain("MUG-001");
     }
 
     @Test
