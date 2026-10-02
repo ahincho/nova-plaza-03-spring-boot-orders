@@ -13,7 +13,7 @@ precio de cada línea es el que devolvió la reserva del catálogo, nunca el del
 |---|---|---|
 | `POST` | `/v1/orders` | crea un pedido pendiente; lleva `Idempotency-Key`, y repetir la compra devuelve la misma respuesta |
 | `GET` | `/v1/orders/{id}` | devuelve un pedido del cliente; el de otro cliente es un 404, igual que uno que no existe |
-| `GET` | `/v1/orders` | lista los pedidos del cliente, del más nuevo al más viejo |
+| `GET` | `/v1/orders` | una página de los pedidos del cliente, del más nuevo al más viejo, para un scroll infinito; ver abajo |
 
 La compra es idempotente con la capacidad de Nova
 ([ADR-047](https://github.com/ahincho/nova-shared-01-docs/blob/main/adrs/shared/ADR-047-idempotencia-detras-de-un-contrato.md)).
@@ -43,6 +43,35 @@ una línea de log.
 Confirmar y cancelar llegan después, y una transición inválida va a responder 409 con un
 `DomainError.conflict`.
 
+### El listado, por cursor
+
+`GET /v1/orders` no devuelve todos los pedidos de una vez: devuelve una página, con la persistencia de Nova
+([ADR-054](https://github.com/ahincho/nova-shared-01-docs/blob/main/adrs/shared/ADR-054-persistencia-reutilizable-con-paginacion-por-cursor.md)).
+Se pide con `?limit=`, 20 por defecto y 100 como máximo, y la siguiente con el `?cursor=` que devolvió la
+anterior, tal como llegó:
+
+```json
+{
+  "success": true,
+  "status": 200,
+  "data": {
+    "items": [ { "id": "…", "status": "PENDING", "items": [ … ] } ],
+    "nextCursor": "eyJ2IjoxLCJzIjoibmV3ZXN0Iiwia…",
+    "hasNext": true
+  }
+}
+```
+
+En la última página, `hasNext` es `false` y `nextCursor` es `null`. El orden es `createdAt` descendente y el
+`id` como desempate, así que un pedido nuevo mientras se navega no hace repetir ni saltar ninguno. Un cursor
+inválido es un 400 con el campo `cursor`, y un límite fuera de rango un 400 con el campo `limit`. El índice
+`orders_customer_created_id`, de la migración `V4`, sigue ese mismo orden.
+
+Cada pedido guarda además quién y cuándo lo creó y lo cambió, y su versión: `Order` hereda de
+`AuditableEntity`, y el actor es el mismo cliente que registra la auditoría del bus. Si dos cambios pisan la
+misma versión, o un dato choca con uno que ya existe, la respuesta es 409, con `CONCURRENT_MODIFICATION` o
+`DATA_CONFLICT`, en lugar de un 500.
+
 ## Lo que usa de Nova
 
 | Pieza | Para qué |
@@ -52,6 +81,7 @@ Confirmar y cancelar llegan después, y una transición inválida va a responder
 | `nova-observability-spring-boot-starter` | trazas, logs y métricas por OTLP |
 | `nova-idempotency-spring-boot-starter` | la compra idempotente, con el almacén en la misma base de pedidos |
 | `nova-cqrs-spring-boot-starter` | los comandos y las consultas, con su auditoría, validación y transacción |
+| `nova-persistence-spring-boot-starter` | la página por cursor del listado, la entidad auditable y los 409 de la base |
 | `nova-architecture-rules` | las reglas de capas, como una prueba más |
 
 ## Comandos y consultas
@@ -64,7 +94,7 @@ El controlador no tiene lógica: cada operación es un mensaje que entrega al `C
 |---|---|---|---|
 | `POST /v1/orders` | `PlaceOrder`, un comando | el identificador del pedido | `PlaceOrderHandler` |
 | `GET /v1/orders/{id}` | `FindOrder`, una consulta | `OrderResponse` | `FindOrderHandler` |
-| `GET /v1/orders` | `ListOrders`, una consulta | `List<OrderResponse>` | `ListOrdersHandler` |
+| `GET /v1/orders` | `ListOrders`, una consulta | `CursorPage<OrderResponse>` | `ListOrdersHandler` |
 
 - **La compra devuelve solo el identificador**, y la vista sale de `FindOrder`. Las dos corren en la
   transacción que abre la idempotencia: el bus usa propagación `REQUIRED` y se suma a ella.

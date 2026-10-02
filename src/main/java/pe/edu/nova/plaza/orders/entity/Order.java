@@ -10,13 +10,13 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
-import jakarta.persistence.Version;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import org.hibernate.annotations.BatchSize;
+import pe.edu.nova.java.starters.persistence.AuditableEntity;
 
 /**
  * Un pedido de un cliente.
@@ -24,6 +24,10 @@ import java.util.UUID;
  * <p>Se crea pendiente, con los precios que devolvió la reserva del catálogo, y guarda la clave de
  * idempotencia de la compra para saber de qué compra salió. La que evita un segundo pedido es la capacidad de
  * idempotencia de Nova (ADR-047); la clave del pedido es única por cliente, como la de la capacidad.
+ *
+ * <p>La auditoría y la versión las hereda de {@link AuditableEntity} (ADR-054): el momento de la compra es su
+ * {@code createdAt}, con el reloj del servicio, y quien compró es su {@code createdBy}, el mismo cliente que audita
+ * el bus.
  */
 @Entity
 @Table(
@@ -32,7 +36,7 @@ import java.util.UUID;
                 @UniqueConstraint(
                         name = "orders_customer_idempotency_key",
                         columnNames = {"customer_id", "idempotency_key"}))
-public class Order {
+public class Order extends AuditableEntity {
 
     @Id
     private UUID id;
@@ -56,14 +60,10 @@ public class Order {
     @Column(name = "idempotency_key", nullable = false)
     private String idempotencyKey;
 
-    @Column(name = "created_at", nullable = false)
-    private Instant createdAt;
-
-    @Version
-    private long version;
-
+    // Una página de pedidos carga las líneas de todos en lotes, y no con un fetch join que rompería el límite.
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("id")
+    @BatchSize(size = 100)
     private List<OrderItem> items = new ArrayList<>();
 
     /** Para JPA. */
@@ -77,16 +77,10 @@ public class Order {
      * @param reservationId la reserva de stock en el catálogo
      * @param currency la moneda, en ISO 4217
      * @param lines las líneas, con el precio de la reserva
-     * @param now el momento de la compra
      * @return el pedido, todavía sin guardar
      */
     public static Order place(
-            String customerId,
-            String idempotencyKey,
-            UUID reservationId,
-            String currency,
-            List<Line> lines,
-            Instant now) {
+            String customerId, String idempotencyKey, UUID reservationId, String currency, List<Line> lines) {
         Order order = new Order();
         order.id = UUID.randomUUID();
         order.customerId = customerId;
@@ -94,7 +88,6 @@ public class Order {
         order.reservationId = reservationId;
         order.currency = currency;
         order.status = OrderStatus.PENDING;
-        order.createdAt = now;
         lines.forEach(line -> order.items.add(new OrderItem(order, line.sku(), line.quantity(), line.unitPrice())));
         order.total = order.items.stream().map(OrderItem::subtotal).reduce(BigDecimal.ZERO, BigDecimal::add);
         return order;
@@ -152,15 +145,6 @@ public class Order {
      */
     public UUID getReservationId() {
         return reservationId;
-    }
-
-    /**
-     * El momento de la compra.
-     *
-     * @return el instante de creación
-     */
-    public Instant getCreatedAt() {
-        return createdAt;
     }
 
     /**
