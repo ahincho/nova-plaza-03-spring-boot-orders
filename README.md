@@ -13,6 +13,8 @@ precio de cada línea es el que devolvió la reserva del catálogo, nunca el del
 |---|---|---|
 | `POST` | `/v1/orders` | crea un pedido pendiente; lleva `Idempotency-Key`, y repetir la compra devuelve la misma respuesta |
 | `GET` | `/v1/orders/{id}` | devuelve un pedido del cliente; el de otro cliente es un 404, igual que uno que no existe |
+| `POST` | `/v1/orders/{id}/confirm` | confirma el pedido; repetirlo responde lo mismo, y uno cancelado es un 409 `ORDER_CANCELLED` |
+| `POST` | `/v1/orders/{id}/cancel` | cancela el pedido, la compensación del BFF; repetirlo responde lo mismo, y uno confirmado es un 409 `ORDER_CONFIRMED` |
 | `GET` | `/v1/orders` | una página de los pedidos del cliente, del más nuevo al más viejo, para un scroll infinito; ver abajo |
 
 La compra es idempotente con la capacidad de Nova
@@ -40,7 +42,7 @@ una línea de log.
 | El pedido no existe o es de otro cliente | 404, `ORDER_NOT_FOUND` (un `DomainError`) |
 | El pedido no es válido | 400, `BAD_REQUEST`, con un error por cada campo |
 
-Confirmar y cancelar llegan después, y una transición inválida va a responder 409 con un
+Confirmar y cancelar son comandos del bus, `ConfirmOrder` y `CancelOrder`, y una transición inválida responde 409 con un
 `DomainError.conflict`.
 
 ### El listado, por cursor
@@ -94,6 +96,8 @@ El controlador no tiene lógica: cada operación es un mensaje que entrega al `C
 |---|---|---|---|
 | `POST /v1/orders` | `PlaceOrder`, un comando | el identificador del pedido | `PlaceOrderHandler` |
 | `GET /v1/orders/{id}` | `FindOrder`, una consulta | `OrderResponse` | `FindOrderHandler` |
+| `POST /v1/orders/{id}/confirm` | `ConfirmOrder`, un comando | el identificador | `ConfirmOrderHandler` |
+| `POST /v1/orders/{id}/cancel` | `CancelOrder`, un comando | el identificador | `CancelOrderHandler` |
 | `GET /v1/orders` | `ListOrders`, una consulta | `CursorPage<OrderResponse>` | `ListOrdersHandler` |
 
 - **La compra devuelve solo el identificador**, y la vista sale de `FindOrder`. Las dos corren en la
