@@ -1,6 +1,5 @@
 package pe.edu.nova.plaza.orders.service;
 
-import java.time.Clock;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -19,17 +18,14 @@ import pe.edu.nova.plaza.orders.repository.OrderRepository;
 public class PlaceOrderHandler implements CommandHandler<PlaceOrder, UUID> {
 
     private final OrderRepository orders;
-    private final Clock clock;
 
     /**
      * Crea el handler.
      *
      * @param orders los pedidos guardados
-     * @param clock el reloj con el que se fecha cada pedido
      */
-    public PlaceOrderHandler(OrderRepository orders, Clock clock) {
+    public PlaceOrderHandler(OrderRepository orders) {
         this.orders = orders;
-        this.clock = clock;
     }
 
     @Override
@@ -42,8 +38,7 @@ public class PlaceOrderHandler implements CommandHandler<PlaceOrder, UUID> {
                 command.idempotencyKey(),
                 command.order().reservationId(),
                 command.order().currency(),
-                lines,
-                clock.instant());
+                lines);
         return orders.save(order).getId();
     }
 }

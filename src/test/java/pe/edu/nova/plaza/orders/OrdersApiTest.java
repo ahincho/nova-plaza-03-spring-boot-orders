@@ -10,6 +10,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.jayway.jsonpath.JsonPath;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -22,6 +28,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import pe.edu.nova.plaza.orders.entity.Order;
 import pe.edu.nova.plaza.orders.repository.OrderRepository;
 
 /** La API de pedidos, contra un Postgres y un Vault reales. */
@@ -78,7 +85,7 @@ class OrdersApiTest {
 
         assertThat(second.getResponse().getContentAsString())
                 .isEqualTo(first.getResponse().getContentAsString());
-        assertThat(orders.findByCustomerIdOrderByCreatedAtDesc("customer-2")).hasSize(1);
+        assertThat(orders.countByCustomerId("customer-2")).isEqualTo(1);
     }
 
     @Test
@@ -104,7 +111,7 @@ class OrdersApiTest {
         mvc.perform(place("customer-7", key, newOrder()))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.errors[0].code").value("IDEMPOTENCY_KEY_REUSED"));
-        assertThat(orders.findByCustomerIdOrderByCreatedAtDesc("customer-7")).hasSize(1);
+        assertThat(orders.countByCustomerId("customer-7")).isEqualTo(1);
     }
 
     @Test
@@ -115,7 +122,7 @@ class OrdersApiTest {
                         .content(newOrder()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].code").value("IDEMPOTENCY_KEY_REQUIRED"));
-        assertThat(orders.findByCustomerIdOrderByCreatedAtDesc("customer-8")).isEmpty();
+        assertThat(orders.countByCustomerId("customer-8")).isZero();
     }
 
     @Test
@@ -146,7 +153,7 @@ class OrdersApiTest {
                 .andExpect(jsonPath("$.errors.length()").value(2))
                 .andExpect(jsonPath("$.errors[*].code", everyItem(is("BAD_REQUEST"))))
                 .andExpect(jsonPath("$.errors[*].field", containsInAnyOrder("currency", "items")));
-        assertThat(orders.findByCustomerIdOrderByCreatedAtDesc("customer-9")).isEmpty();
+        assertThat(orders.countByCustomerId("customer-9")).isZero();
     }
 
     @Test
@@ -175,9 +182,68 @@ class OrdersApiTest {
 
         mvc.perform(get("/v1/orders").header("X-Customer-Id", "customer-4"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(2))
-                .andExpect(jsonPath("$.data[0].id").value(newer))
-                .andExpect(jsonPath("$.data[1].id").value(older));
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.items.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].id").value(newer))
+                .andExpect(jsonPath("$.data.items[1].id").value(older))
+                .andExpect(jsonPath("$.data.items[0].items.length()").value(2))
+                .andExpect(jsonPath("$.data.hasNext").value(false))
+                .andExpect(jsonPath("$.data.nextCursor").isEmpty());
+    }
+
+    @Test
+    void aCustomerScrollsTheirOrdersPageByPageWithoutRepeatsOrGaps() throws Exception {
+        Set<String> placed = new HashSet<>();
+        for (int i = 0; i < 5; i++) {
+            placed.add(idOf(mvc.perform(place("customer-12", UUID.randomUUID().toString()))
+                    .andReturn()));
+        }
+
+        List<String> seen = new ArrayList<>();
+        String cursor = null;
+        int pages = 0;
+        do {
+            var request =
+                    get("/v1/orders").header("X-Customer-Id", "customer-12").param("limit", "2");
+            if (cursor != null) {
+                request.param("cursor", cursor);
+            }
+            String body = mvc.perform(request)
+                    .andExpect(status().isOk())
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString();
+            seen.addAll(JsonPath.read(body, "$.data.items[*].id"));
+            cursor = JsonPath.read(body, "$.data.nextCursor");
+            pages++;
+        } while (cursor != null);
+
+        assertThat(pages).isEqualTo(3);
+        assertThat(seen).hasSize(5).doesNotHaveDuplicates();
+        assertThat(Set.copyOf(seen)).isEqualTo(placed);
+    }
+
+    @Test
+    void aBadCursorOrLimitIs400OnItsField() throws Exception {
+        mvc.perform(get("/v1/orders").header("X-Customer-Id", "customer-13").param("cursor", "not-a-cursor"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("cursor"));
+        mvc.perform(get("/v1/orders").header("X-Customer-Id", "customer-13").param("limit", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].field").value("limit"));
+    }
+
+    @Test
+    void anOrderRecordsWhoPlacedItAndWhen() throws Exception {
+        Instant before = Instant.now().minusSeconds(1);
+        String id = idOf(
+                mvc.perform(place("customer-14", UUID.randomUUID().toString())).andReturn());
+
+        Order order = orders.findById(UUID.fromString(id)).orElseThrow();
+        assertThat(order.getCreatedBy()).isEqualTo("customer-14");
+        assertThat(order.getUpdatedBy()).isEqualTo("customer-14");
+        assertThat(order.getCreatedAt()).isAfter(before).isEqualTo(order.getUpdatedAt());
+        assertThat(order.getVersion()).isZero();
     }
 
     private static org.springframework.test.web.servlet.RequestBuilder place(String customerId, String key) {

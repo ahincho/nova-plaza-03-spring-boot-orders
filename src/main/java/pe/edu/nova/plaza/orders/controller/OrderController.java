@@ -1,7 +1,6 @@
 package pe.edu.nova.plaza.orders.controller;
 
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import pe.edu.nova.java.libs.cqrs.CommandBus;
 import pe.edu.nova.java.libs.cqrs.QueryBus;
+import pe.edu.nova.java.libs.persistence.CursorPage;
+import pe.edu.nova.java.libs.persistence.CursorRequest;
 import pe.edu.nova.java.starters.idempotency.Idempotent;
 import pe.edu.nova.plaza.orders.dto.CreateOrderRequest;
 import pe.edu.nova.plaza.orders.dto.OrderResponse;
@@ -88,13 +89,16 @@ public class OrderController {
     }
 
     /**
-     * Lista los pedidos del cliente, del más nuevo al más viejo.
+     * Una página de los pedidos del cliente, del más nuevo al más viejo, para un scroll infinito (ADR-054). Se
+     * pide con {@code ?limit=}, 20 por defecto y 100 como máximo, y la siguiente con el {@code ?cursor=} que
+     * devolvió la anterior.
      *
      * @param customerId el cliente
-     * @return sus pedidos
+     * @param page cuántos pedidos y desde qué cursor, ya validado
+     * @return la página, con el cursor de la siguiente si hay más
      */
     @GetMapping
-    public List<OrderResponse> list(@RequestHeader(CUSTOMER_HEADER) String customerId) {
-        return queries.execute(new ListOrders(customerId));
+    public CursorPage<OrderResponse> list(@RequestHeader(CUSTOMER_HEADER) String customerId, CursorRequest page) {
+        return queries.execute(new ListOrders(customerId, page));
     }
 }
