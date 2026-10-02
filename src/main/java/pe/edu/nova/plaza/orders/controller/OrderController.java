@@ -12,15 +12,21 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import pe.edu.nova.java.libs.cqrs.CommandBus;
+import pe.edu.nova.java.libs.cqrs.QueryBus;
 import pe.edu.nova.java.starters.idempotency.Idempotent;
 import pe.edu.nova.plaza.orders.dto.CreateOrderRequest;
 import pe.edu.nova.plaza.orders.dto.OrderResponse;
-import pe.edu.nova.plaza.orders.entity.Order;
-import pe.edu.nova.plaza.orders.service.OrderService;
+import pe.edu.nova.plaza.orders.service.FindOrder;
+import pe.edu.nova.plaza.orders.service.ListOrders;
+import pe.edu.nova.plaza.orders.service.PlaceOrder;
 
 /**
  * La API interna de pedidos. La llama solo el BFF, que ya validó el token y pasa el cliente en
  * {@value #CUSTOMER_HEADER}.
+ *
+ * <p>No tiene lógica: cada operación es un comando o una consulta que entrega a su bus (ADR-053), y el bus le
+ * pone la auditoría, la validación y la transacción.
  */
 @RestController
 @RequestMapping("/v1/orders")
@@ -32,21 +38,27 @@ public class OrderController {
     /** La clave con la que el cliente puede repetir una compra sin duplicarla. */
     public static final String IDEMPOTENCY_HEADER = "Idempotency-Key";
 
-    private final OrderService service;
+    private final CommandBus commands;
+    private final QueryBus queries;
 
     /**
      * Crea el controlador.
      *
-     * @param service el servicio de pedidos
+     * @param commands el bus de comandos
+     * @param queries el bus de consultas
      */
-    public OrderController(OrderService service) {
-        this.service = service;
+    public OrderController(CommandBus commands, QueryBus queries) {
+        this.commands = commands;
+        this.queries = queries;
     }
 
     /**
      * Crea un pedido pendiente. La compra es idempotente (ADR-047): si se repite con la misma clave, el
      * cliente recibe la misma respuesta, con {@code Idempotent-Replayed: true}, y no se crea otro pedido. La
      * misma clave de otro cliente es otra compra, y con otro contenido es un 422.
+     *
+     * <p>El comando devuelve solo el identificador, y la vista sale de la consulta, dentro de la misma
+     * transacción que la idempotencia abrió para la compra.
      *
      * @param customerId el cliente
      * @param idempotencyKey la clave de la compra
@@ -59,8 +71,8 @@ public class OrderController {
             @RequestHeader(CUSTOMER_HEADER) String customerId,
             @RequestHeader(IDEMPOTENCY_HEADER) String idempotencyKey,
             @Valid @RequestBody CreateOrderRequest request) {
-        Order order = service.place(customerId, idempotencyKey, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(order));
+        UUID id = commands.execute(new PlaceOrder(customerId, idempotencyKey, request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(queries.execute(new FindOrder(customerId, id)));
     }
 
     /**
@@ -72,7 +84,7 @@ public class OrderController {
      */
     @GetMapping("/{id}")
     public OrderResponse find(@RequestHeader(CUSTOMER_HEADER) String customerId, @PathVariable UUID id) {
-        return toResponse(service.find(customerId, id));
+        return queries.execute(new FindOrder(customerId, id));
     }
 
     /**
@@ -83,23 +95,6 @@ public class OrderController {
      */
     @GetMapping
     public List<OrderResponse> list(@RequestHeader(CUSTOMER_HEADER) String customerId) {
-        return service.list(customerId).stream()
-                .map(OrderController::toResponse)
-                .toList();
-    }
-
-    private static OrderResponse toResponse(Order order) {
-        List<OrderResponse.Item> items = order.getItems().stream()
-                .map(item -> new OrderResponse.Item(item.getSku(), item.getQuantity(), item.getUnitPrice()))
-                .toList();
-        return new OrderResponse(
-                order.getId(),
-                order.getCustomerId(),
-                order.getStatus().name(),
-                order.getCurrency(),
-                order.getTotal(),
-                order.getReservationId(),
-                order.getCreatedAt(),
-                items);
+        return queries.execute(new ListOrders(customerId));
     }
 }

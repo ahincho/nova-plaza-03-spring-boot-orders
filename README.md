@@ -51,7 +51,32 @@ Confirmar y cancelar llegan después, y una transición inválida va a responder
 | `nova-secrets-spring-boot-starter` y `nova-secrets-vault` | las credenciales de la base salen de Vault, del secreto `plaza/orders/db` |
 | `nova-observability-spring-boot-starter` | trazas, logs y métricas por OTLP |
 | `nova-idempotency-spring-boot-starter` | la compra idempotente, con el almacén en la misma base de pedidos |
+| `nova-cqrs-spring-boot-starter` | los comandos y las consultas, con su auditoría, validación y transacción |
 | `nova-architecture-rules` | las reglas de capas, como una prueba más |
+
+## Comandos y consultas
+
+El controlador no tiene lógica: cada operación es un mensaje que entrega al `CommandBus` o al
+`QueryBus` de [`nova-java-27-cqrs`](https://github.com/ahincho/nova-java-27-cqrs)
+([ADR-053](https://github.com/ahincho/nova-shared-01-docs/blob/main/adrs/shared/ADR-053-cqrs-con-command-bus-y-query-bus.md)).
+
+| Operación | Mensaje | Devuelve | Handler |
+|---|---|---|---|
+| `POST /v1/orders` | `PlaceOrder`, un comando | el identificador del pedido | `PlaceOrderHandler` |
+| `GET /v1/orders/{id}` | `FindOrder`, una consulta | `OrderResponse` | `FindOrderHandler` |
+| `GET /v1/orders` | `ListOrders`, una consulta | `List<OrderResponse>` | `ListOrdersHandler` |
+
+- **La compra devuelve solo el identificador**, y la vista sale de `FindOrder`. Las dos corren en la
+  transacción que abre la idempotencia: el bus usa propagación `REQUIRED` y se suma a ella.
+- **Una consulta corre de solo lectura**, y arma la vista dentro de su transacción: la entidad nunca
+  sale del servicio.
+- **Cada mensaje se audita**, comandos y consultas, en el logger `nova.audit`. El actor es el cliente
+  de `X-Customer-Id`: `CustomerActorResolver` reemplaza al de Nova, que lo tomaría de Spring Security.
+
+```
+COMMAND PlaceOrder by customer-7: SUCCEEDED - in 14 ms
+QUERY FindOrder by customer-7: SUCCEEDED - in 3 ms
+```
 
 ## Correrlo en local
 
