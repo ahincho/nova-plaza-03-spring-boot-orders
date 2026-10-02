@@ -17,7 +17,7 @@ dependencies {
     // Los comandos y las consultas del servicio, con su auditoría, validación y transacción (ADR-053).
     implementation("pe.edu.nova.java.starters:nova-cqrs-spring-boot-starter:1.0.0")
     // La entidad auditable, la página por cursor de GET /v1/orders y los 409 de la base (ADR-054).
-    implementation("pe.edu.nova.java.starters:nova-persistence-spring-boot-starter:0.1.0")
+    implementation("pe.edu.nova.java.starters:nova-persistence-spring-boot-starter:1.0.0")
     runtimeOnly("pe.edu.nova.java.libs:nova-secrets-vault:$novaSecrets")
 
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
