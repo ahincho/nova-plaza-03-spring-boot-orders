@@ -11,7 +11,7 @@ version = findProperty("version") as String
 val novaSecrets = "1.2.0"
 
 dependencies {
-    implementation("pe.edu.nova.java.starters:nova-observability-spring-boot-starter:3.0.0")
+    implementation("pe.edu.nova.java.starters:nova-observability-spring-boot-starter:3.0.1")
     implementation("pe.edu.nova.java.starters:nova-secrets-spring-boot-starter:$novaSecrets")
     implementation("pe.edu.nova.java.starters:nova-idempotency-spring-boot-starter:0.1.1")
     // Los comandos y las consultas del servicio, con su auditoría, validación y transacción (ADR-053).
