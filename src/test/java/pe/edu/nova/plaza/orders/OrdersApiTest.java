@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,13 +27,17 @@ import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import pe.edu.nova.plaza.orders.entity.Order;
 import pe.edu.nova.plaza.orders.repository.OrderRepository;
 
-/** La API de pedidos, contra un Postgres y un Vault reales. */
-@SpringBootTest
+/**
+ * La API de pedidos, contra un Postgres y un Vault reales. Las filas del outbox se conservan para ver qué eventos
+ * habría publicado Debezium.
+ */
+@SpringBootTest(properties = "nova.outbox.remove-after-insert=false")
 @AutoConfigureMockMvc
 @ExtendWith(OutputCaptureExtension.class)
 class OrdersApiTest {
@@ -53,6 +58,9 @@ class OrdersApiTest {
 
     @Autowired
     private OrderRepository orders;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @BeforeAll
     static void infrastructure() {
@@ -292,6 +300,47 @@ class OrdersApiTest {
         mvc.perform(post("/v1/orders/{id}/cancel", id).header("X-Customer-Id", "someone-else"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errors[0].code").value("ORDER_NOT_FOUND"));
+    }
+
+    @Test
+    void eachChangeOfAnOrderWritesItsEventOnceAndWithoutTheCustomer() throws Exception {
+        String confirmed = idOf(
+                mvc.perform(place("customer-17", UUID.randomUUID().toString())).andReturn());
+        String cancelled = idOf(
+                mvc.perform(place("customer-17", UUID.randomUUID().toString())).andReturn());
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mvc.perform(post("/v1/orders/{id}/confirm", confirmed).header("X-Customer-Id", "customer-17"))
+                    .andExpect(status().isOk());
+            mvc.perform(post("/v1/orders/{id}/cancel", cancelled).header("X-Customer-Id", "customer-17"))
+                    .andExpect(status().isOk());
+        }
+
+        assertThat(eventsOf(confirmed))
+                .extracting(event -> event.get("type"))
+                .containsExactlyInAnyOrder(
+                        "pe.edu.nova.plaza.order.created.v1", "pe.edu.nova.plaza.order.confirmed.v1");
+        assertThat(eventsOf(cancelled))
+                .extracting(event -> event.get("type"))
+                .containsExactlyInAnyOrder(
+                        "pe.edu.nova.plaza.order.created.v1", "pe.edu.nova.plaza.order.cancelled.v1");
+        Map<String, Object> event = eventsOf(confirmed).stream()
+                .filter(row -> row.get("type").equals("pe.edu.nova.plaza.order.confirmed.v1"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(event.get("aggregate_type")).isEqualTo("orders");
+        assertThat(event.get("source")).isEqualTo("/plaza/orders");
+        assertThat(JsonPath.<String>read(event.get("payload").toString(), "$.orderId"))
+                .isEqualTo(confirmed);
+        assertThat(JsonPath.<List<String>>read(event.get("payload").toString(), "$.items[*].sku"))
+                .containsExactly("MUG-001", "TEE-002");
+        assertThat(event.get("payload").toString()).doesNotContain("customer-17");
+    }
+
+    private List<Map<String, Object>> eventsOf(String orderId) {
+        return jdbc.queryForList(
+                "select type, aggregate_type, source, payload::text as payload from outbox where aggregate_id = ?",
+                orderId);
     }
 
     /** Un pedido con su propia reserva: dos llamadas dan dos pedidos distintos. */

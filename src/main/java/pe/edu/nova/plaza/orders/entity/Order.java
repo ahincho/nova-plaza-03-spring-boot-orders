@@ -122,26 +122,33 @@ public class Order extends AuditableEntity {
      * Confirma el pedido: la compra terminó. Confirmar uno confirmado no cambia nada, así que el BFF puede repetir
      * el paso.
      *
+     * @return {@code true} si el pedido pasó a confirmado, y {@code false} si ya lo estaba: solo el cambio publica
+     *     un evento
      * @throws DomainError {@code ORDER_CANCELLED}, un 409, si el pedido ya se canceló
      */
-    public void confirm() {
+    public boolean confirm() {
         if (status == OrderStatus.CANCELLED) {
             throw DomainError.conflict(ORDER_CANCELLED, "El pedido " + id + " ya se canceló");
         }
+        boolean changed = status != OrderStatus.CONFIRMED;
         status = OrderStatus.CONFIRMED;
+        return changed;
     }
 
     /**
      * Cancela el pedido: es la compensación del BFF cuando la compra falla después de crearlo. Cancelar uno
      * cancelado no cambia nada.
      *
+     * @return {@code true} si el pedido pasó a cancelado, y {@code false} si ya lo estaba
      * @throws DomainError {@code ORDER_CONFIRMED}, un 409, si el pedido ya se confirmó
      */
-    public void cancel() {
+    public boolean cancel() {
         if (status == OrderStatus.CONFIRMED) {
             throw DomainError.conflict(ORDER_CONFIRMED, "El pedido " + id + " ya se confirmó");
         }
+        boolean changed = status != OrderStatus.CANCELLED;
         status = OrderStatus.CANCELLED;
+        return changed;
     }
 
     /**
