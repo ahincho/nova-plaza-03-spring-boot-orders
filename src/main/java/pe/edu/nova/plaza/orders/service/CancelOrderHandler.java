@@ -15,14 +15,17 @@ import pe.edu.nova.plaza.orders.repository.OrderRepository;
 public class CancelOrderHandler implements CommandHandler<CancelOrder, UUID> {
 
     private final OrderRepository orders;
+    private final OrderEvents events;
 
     /**
      * Crea el handler.
      *
      * @param orders los pedidos guardados
+     * @param events los eventos del pedido, que se escriben en la misma transacción
      */
-    public CancelOrderHandler(OrderRepository orders) {
+    public CancelOrderHandler(OrderRepository orders, OrderEvents events) {
         this.orders = orders;
+        this.events = events;
     }
 
     /**
@@ -38,7 +41,9 @@ public class CancelOrderHandler implements CommandHandler<CancelOrder, UUID> {
                 .filter(found -> found.getCustomerId().equals(command.customerId()))
                 .orElseThrow(() -> DomainError.notFound(
                         FindOrderHandler.ORDER_NOT_FOUND, "El pedido " + command.id() + " no existe"));
-        order.cancel();
+        if (order.cancel()) {
+            events.cancelled(order);
+        }
         return order.getId();
     }
 }

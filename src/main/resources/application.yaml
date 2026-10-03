@@ -27,6 +27,9 @@ nova:
   # La clave de idempotencia de una compra vale por cliente, y el cliente llega del BFF en este header.
   idempotency:
     scope-header: X-Customer-Id
+  # Los eventos salen como CloudEvents con este source; Debezium los lee del log y los publica en plaza.orders.
+  outbox:
+    source: /plaza/orders
   observability:
     otlp:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}

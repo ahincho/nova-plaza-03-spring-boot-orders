@@ -18,14 +18,17 @@ import pe.edu.nova.plaza.orders.repository.OrderRepository;
 public class PlaceOrderHandler implements CommandHandler<PlaceOrder, UUID> {
 
     private final OrderRepository orders;
+    private final OrderEvents events;
 
     /**
      * Crea el handler.
      *
      * @param orders los pedidos guardados
+     * @param events los eventos del pedido, que se escriben en la misma transacción
      */
-    public PlaceOrderHandler(OrderRepository orders) {
+    public PlaceOrderHandler(OrderRepository orders, OrderEvents events) {
         this.orders = orders;
+        this.events = events;
     }
 
     @Override
@@ -39,6 +42,8 @@ public class PlaceOrderHandler implements CommandHandler<PlaceOrder, UUID> {
                 command.order().reservationId(),
                 command.order().currency(),
                 lines);
-        return orders.save(order).getId();
+        Order saved = orders.save(order);
+        events.created(saved);
+        return saved.getId();
     }
 }
