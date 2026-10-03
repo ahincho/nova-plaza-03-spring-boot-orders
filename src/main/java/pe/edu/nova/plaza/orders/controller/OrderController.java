@@ -18,6 +18,8 @@ import pe.edu.nova.java.libs.persistence.CursorRequest;
 import pe.edu.nova.java.starters.idempotency.Idempotent;
 import pe.edu.nova.plaza.orders.dto.CreateOrderRequest;
 import pe.edu.nova.plaza.orders.dto.OrderResponse;
+import pe.edu.nova.plaza.orders.service.CancelOrder;
+import pe.edu.nova.plaza.orders.service.ConfirmOrder;
 import pe.edu.nova.plaza.orders.service.FindOrder;
 import pe.edu.nova.plaza.orders.service.ListOrders;
 import pe.edu.nova.plaza.orders.service.PlaceOrder;
@@ -85,6 +87,34 @@ public class OrderController {
      */
     @GetMapping("/{id}")
     public OrderResponse find(@RequestHeader(CUSTOMER_HEADER) String customerId, @PathVariable UUID id) {
+        return queries.execute(new FindOrder(customerId, id));
+    }
+
+    /**
+     * Confirma el pedido: la compra terminó. Repetirlo responde lo mismo; uno cancelado es un 409
+     * {@code ORDER_CANCELLED}.
+     *
+     * @param customerId el cliente
+     * @param id el pedido
+     * @return el pedido confirmado
+     */
+    @PostMapping("/{id}/confirm")
+    public OrderResponse confirm(@RequestHeader(CUSTOMER_HEADER) String customerId, @PathVariable UUID id) {
+        commands.execute(new ConfirmOrder(customerId, id));
+        return queries.execute(new FindOrder(customerId, id));
+    }
+
+    /**
+     * Cancela el pedido: la compensación del BFF cuando la compra falla después de crearlo. Repetirlo responde lo
+     * mismo; uno confirmado es un 409 {@code ORDER_CONFIRMED}.
+     *
+     * @param customerId el cliente
+     * @param id el pedido
+     * @return el pedido cancelado
+     */
+    @PostMapping("/{id}/cancel")
+    public OrderResponse cancel(@RequestHeader(CUSTOMER_HEADER) String customerId, @PathVariable UUID id) {
+        commands.execute(new CancelOrder(customerId, id));
         return queries.execute(new FindOrder(customerId, id));
     }
 

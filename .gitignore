@@ -44,3 +44,6 @@ bin/
 
 ### Node ###
 node_modules/
+
+# La configuración de IntelliJ es de cada máquina.
+.idea/

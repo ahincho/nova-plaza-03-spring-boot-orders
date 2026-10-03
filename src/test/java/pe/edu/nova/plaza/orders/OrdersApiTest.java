@@ -259,6 +259,41 @@ class OrdersApiTest {
                 .content(order);
     }
 
+    @Test
+    void aConfirmedOrderStaysConfirmedAndCannotBeCancelled() throws Exception {
+        String id = idOf(
+                mvc.perform(place("customer-15", UUID.randomUUID().toString())).andReturn());
+
+        mvc.perform(post("/v1/orders/{id}/confirm", id).header("X-Customer-Id", "customer-15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+        mvc.perform(post("/v1/orders/{id}/confirm", id).header("X-Customer-Id", "customer-15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+        mvc.perform(post("/v1/orders/{id}/cancel", id).header("X-Customer-Id", "customer-15"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errors[0].code").value("ORDER_CONFIRMED"));
+    }
+
+    @Test
+    void aCancelledOrderStaysCancelledAndCannotBeConfirmed() throws Exception {
+        String id = idOf(
+                mvc.perform(place("customer-16", UUID.randomUUID().toString())).andReturn());
+
+        mvc.perform(post("/v1/orders/{id}/cancel", id).header("X-Customer-Id", "customer-16"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"));
+        mvc.perform(post("/v1/orders/{id}/cancel", id).header("X-Customer-Id", "customer-16"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/v1/orders/{id}/confirm", id).header("X-Customer-Id", "customer-16"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.errors[0].code").value("ORDER_CANCELLED"));
+        // El pedido de otro cliente no existe para él, tampoco al cancelarlo.
+        mvc.perform(post("/v1/orders/{id}/cancel", id).header("X-Customer-Id", "someone-else"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errors[0].code").value("ORDER_NOT_FOUND"));
+    }
+
     /** Un pedido con su propia reserva: dos llamadas dan dos pedidos distintos. */
     private static String newOrder() {
         return ORDER.formatted(UUID.randomUUID());

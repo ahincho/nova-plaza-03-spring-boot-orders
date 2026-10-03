@@ -16,6 +16,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import org.hibernate.annotations.BatchSize;
+import pe.edu.nova.java.libs.api.standard.error.DomainError;
 import pe.edu.nova.java.starters.persistence.AuditableEntity;
 
 /**
@@ -37,6 +38,12 @@ import pe.edu.nova.java.starters.persistence.AuditableEntity;
                         name = "orders_customer_idempotency_key",
                         columnNames = {"customer_id", "idempotency_key"}))
 public class Order extends AuditableEntity {
+
+    /** El código del error de un pedido cancelado que se quiere confirmar. */
+    public static final String ORDER_CANCELLED = "ORDER_CANCELLED";
+
+    /** El código del error de un pedido confirmado que se quiere cancelar. */
+    public static final String ORDER_CONFIRMED = "ORDER_CONFIRMED";
 
     @Id
     private UUID id;
@@ -109,6 +116,32 @@ public class Order extends AuditableEntity {
      */
     public String getCustomerId() {
         return customerId;
+    }
+
+    /**
+     * Confirma el pedido: la compra terminó. Confirmar uno confirmado no cambia nada, así que el BFF puede repetir
+     * el paso.
+     *
+     * @throws DomainError {@code ORDER_CANCELLED}, un 409, si el pedido ya se canceló
+     */
+    public void confirm() {
+        if (status == OrderStatus.CANCELLED) {
+            throw DomainError.conflict(ORDER_CANCELLED, "El pedido " + id + " ya se canceló");
+        }
+        status = OrderStatus.CONFIRMED;
+    }
+
+    /**
+     * Cancela el pedido: es la compensación del BFF cuando la compra falla después de crearlo. Cancelar uno
+     * cancelado no cambia nada.
+     *
+     * @throws DomainError {@code ORDER_CONFIRMED}, un 409, si el pedido ya se confirmó
+     */
+    public void cancel() {
+        if (status == OrderStatus.CONFIRMED) {
+            throw DomainError.conflict(ORDER_CONFIRMED, "El pedido " + id + " ya se confirmó");
+        }
+        status = OrderStatus.CANCELLED;
     }
 
     /**
